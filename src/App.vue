@@ -61,18 +61,18 @@
       <div 
         ref="editorContainer" 
         class="monaco-editor"
-        :style="{ right: `${terminalWidth}px` }"
+        :style="editorInlineStyle"
       ></div>
       
       <div 
         class="resize-handle"
         @mousedown="startResize"
-        :style="{ right: `${terminalWidth}px` }"
+        :style="resizeHandleInlineStyle"
       ></div>
 
       <div 
         class="terminal-panel"
-        :style="{ width: `${terminalWidth}px` }"
+        :style="terminalPanelInlineStyle"
       >
         <div class="terminal-header">终端输出</div>
         <div ref="terminalContainer" class="terminal-content"></div>
@@ -82,7 +82,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
 import * as monaco from 'monaco-editor'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
@@ -108,8 +108,34 @@ const isRunning = ref<boolean>(false)
 const terminalWidth = ref<number>(400)
 let isResizing = false
 
+// 移动端检测
+const isMobile = ref<boolean>(false)
+const evaluateIsMobile = (): void => {
+  isMobile.value = window.innerWidth <= 768
+}
+
+// 计算样式（根据是否移动端）
+const editorInlineStyle = computed(() => {
+  return isMobile.value
+    ? { left: '0', right: '0', top: '0', bottom: '50%' }
+    : { right: `${terminalWidth.value}px`, left: '0', top: '0', bottom: '0' }
+})
+
+const resizeHandleInlineStyle = computed(() => {
+  return isMobile.value
+    ? { display: 'none' }
+    : { right: `${terminalWidth.value}px` }
+})
+
+const terminalPanelInlineStyle = computed(() => {
+  return isMobile.value
+    ? { width: '100%', left: '0', right: '0', top: '50%', bottom: '0' }
+    : { width: `${terminalWidth.value}px`, right: '0', top: '0', bottom: '0' }
+})
+
 // 修改事件处理函数的类型
 const startResize = (_e: MouseEvent): void => {
+  if (isMobile.value) return
   isResizing = true
   document.addEventListener('mousemove', handleResize)
   document.addEventListener('mouseup', stopResize)
@@ -231,6 +257,12 @@ const handleRun = async (): Promise<void> => {
   }
 }
 
+const handleWindowResize = (): void => {
+  evaluateIsMobile()
+  editor?.layout()
+  fitAddon?.fit()
+}
+
 onMounted(async () => {
   // 加载默认文件
   filename.value = 'demo'
@@ -275,11 +307,11 @@ onMounted(async () => {
   }
   fitAddon.fit()
   
-  // 监听窗口大小变化
-  window.addEventListener('resize', () => {
-    editor?.layout()
-    fitAddon?.fit()
-  })
+  // 初始移动端判断
+  evaluateIsMobile()
+
+  // 监听窗口大小变化（使用可清理的处理函数）
+  window.addEventListener('resize', handleWindowResize)
   
   // 设置终端回调
   setTerminalCallback((output: string) => {
@@ -288,9 +320,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
-  window.removeEventListener('resize', () => {
-    fitAddon?.fit()
-  })
+  window.removeEventListener('resize', handleWindowResize)
   terminal?.dispose()
   document.removeEventListener('mousemove', handleResize)
   document.removeEventListener('mouseup', stopResize)
@@ -487,5 +517,31 @@ onBeforeUnmount(() => {
 
 .resize-handle:active {
   background: rgba(0, 102, 255, 0.4);
+}
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+  .toolbar {
+    height: auto;
+    padding: 8px;
+    align-items: flex-start;
+  }
+  .toolbar-group {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .filename-input {
+    width: 100%;
+    flex: 1;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+  .main-content {
+    position: relative;
+  }
+  .terminal-panel {
+    border-left: none;
+    border-top: 1px solid #e0e0e0;
+  }
 }
 </style>
